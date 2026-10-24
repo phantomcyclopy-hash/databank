@@ -404,7 +404,7 @@ class MuralPage extends StatelessWidget {
     final datasHoje = comemorativasNoDia(banco, h);
     final proximasDatas = proximasComemorativas(banco, h, 45).take(6).toList();
 
-    final niverMes = banco.membros.where((m) => m.dataNascimento?.month == h.month).toList()
+    final niverMes = banco.ativos.where((m) => m.dataNascimento?.month == h.month).toList()
       ..sort((a, b) {
         final c = a.dataNascimento!.day.compareTo(b.dataNascimento!.day);
         return c != 0

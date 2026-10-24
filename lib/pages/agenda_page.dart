@@ -51,7 +51,7 @@ class _AgendaPageState extends State<AgendaPage> {
     return l;
   }
 
-  List<Entidade> _aniversariosDo(DateTime d) => _banco.membros.where((m) {
+  List<Entidade> _aniversariosDo(DateTime d) => _banco.ativos.where((m) {
         final n = m.dataNascimento;
         return n != null && n.month == d.month && n.day == d.day;
       }).toList();

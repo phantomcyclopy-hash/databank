@@ -207,6 +207,9 @@ class Entidade {
   bool requerAssinatura; // quando marcado, exige CPF/RG e aparece nas listas de assinatura
   String assinaturaNome; // nome como deve aparecer abaixo da assinatura ('' = o nome)
   String assinaturaCargo; // cargo / função ao assinar
+  bool ativo; // false = desligado: continua no cadastro, mas some das listas e contagens
+  String dataSaida; // 'aaaa-mm-dd'
+  String motivoSaida;
   String sexo;
   String tipoSanguineo;
   String telefone;
@@ -229,6 +232,9 @@ class Entidade {
     this.requerAssinatura = false,
     this.assinaturaNome = '',
     this.assinaturaCargo = '',
+    this.ativo = true,
+    this.dataSaida = '',
+    this.motivoSaida = '',
     this.sexo = 'N/A',
     this.tipoSanguineo = 'N/A',
     this.telefone = '',
@@ -303,6 +309,9 @@ class Entidade {
       requerAssinatura: requerAssinatura,
       assinaturaNome: assinaturaNome,
       assinaturaCargo: assinaturaCargo,
+      ativo: ativo,
+      dataSaida: dataSaida,
+      motivoSaida: motivoSaida,
       sexo: sexo,
       tipoSanguineo: tipoSanguineo,
       telefone: telefone,
@@ -333,6 +342,9 @@ class Entidade {
         'requerAssinatura': requerAssinatura,
         'assinaturaNome': assinaturaNome,
         'assinaturaCargo': assinaturaCargo,
+        'ativo': ativo,
+        'dataSaida': dataSaida,
+        'motivoSaida': motivoSaida,
         'sexo': sexo,
         'tipoSanguineo': tipoSanguineo,
         'telefone': telefone,
@@ -358,6 +370,9 @@ class Entidade {
       requerAssinatura: json['requerAssinatura'] as bool? ?? false,
       assinaturaNome: _str(json['assinaturaNome']),
       assinaturaCargo: _str(json['assinaturaCargo']),
+      ativo: json['ativo'] as bool? ?? true,
+      dataSaida: _str(json['dataSaida']),
+      motivoSaida: _str(json['motivoSaida']),
       sexo: _str(json['sexo'], 'N/A'),
       tipoSanguineo: _str(json['tipoSanguineo'], 'N/A'),
       telefone: _str(json['telefone']),
@@ -613,6 +628,150 @@ class DataIgreja {
 }
 
 // ---------------------------------------------------------------------------
+// Atas (relatórios de reunião) e movimento de membros
+// ---------------------------------------------------------------------------
+
+const Map<String, String> kCategoriasRegistro = {
+  'acontecimento': 'Acontecimento',
+  'evento': 'Evento',
+  'posicionamento': 'Posicionamento',
+  'feito': 'Feito / realizado',
+  'outro': 'Outro',
+};
+
+/// Entrada ou saída de um membro (alimenta as atas automaticamente).
+class Movimento {
+  String id;
+  String membroId;
+  String nome; // cópia do nome na hora do movimento
+  String tipo; // 'entrada' | 'saida'
+  String data; // 'aaaa-mm-dd'
+  String motivo;
+
+  Movimento({
+    required this.id,
+    required this.membroId,
+    required this.nome,
+    required this.tipo,
+    required this.data,
+    this.motivo = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'membroId': membroId,
+        'nome': nome,
+        'tipo': tipo,
+        'data': data,
+        'motivo': motivo,
+      };
+
+  factory Movimento.fromJson(Map<String, dynamic> json) => Movimento(
+        id: _str(json['id']),
+        membroId: _str(json['membroId']),
+        nome: _str(json['nome']),
+        tipo: _str(json['tipo'], 'entrada'),
+        data: _str(json['data']),
+        motivo: _str(json['motivo']),
+      );
+}
+
+/// Um registro dentro da ata (acontecimento, evento, posicionamento, feito...).
+class RegistroAta {
+  String id;
+  String data; // 'aaaa-mm-dd'
+  String categoria; // chave de kCategoriasRegistro
+  String texto;
+
+  RegistroAta({
+    required this.id,
+    this.data = '',
+    this.categoria = 'acontecimento',
+    this.texto = '',
+  });
+
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'data': data, 'categoria': categoria, 'texto': texto};
+
+  factory RegistroAta.fromJson(Map<String, dynamic> json) => RegistroAta(
+        id: _str(json['id']),
+        data: _str(json['data']),
+        categoria: _str(json['categoria'], 'acontecimento'),
+        texto: _str(json['texto']),
+      );
+}
+
+/// Ata de reunião. 'ordinaria' = relatório do mês (acumula registros e o
+/// movimento de membros do mês); 'extraordinaria' = folha avulsa, não acumulativa.
+class Ata {
+  String id;
+  String tipo; // 'ordinaria' | 'extraordinaria'
+  String titulo;
+  String mes; // 'aaaa-mm' (ordinária)
+  String data; // data da reunião 'aaaa-mm-dd' ('' = não informada)
+  int hora; // minutos desde 00:00, ou -1
+  String texto; // anotações livres (bloco de notas, com marcação simples)
+  List<RegistroAta> registros;
+  bool incluirMovimentos; // entradas e saídas de membros no documento
+  String periodoIni; // extraordinária: período do movimento de membros
+  String periodoFim;
+  bool assinaturasMembros; // incluir assinaturas de quem "requer assinatura"
+  int criadoEm;
+  int atualizadoEm;
+
+  Ata({
+    required this.id,
+    this.tipo = 'ordinaria',
+    required this.titulo,
+    this.mes = '',
+    this.data = '',
+    this.hora = -1,
+    this.texto = '',
+    List<RegistroAta>? registros,
+    this.incluirMovimentos = true,
+    this.periodoIni = '',
+    this.periodoFim = '',
+    this.assinaturasMembros = false,
+    this.criadoEm = 0,
+    this.atualizadoEm = 0,
+  }) : registros = registros ?? [];
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'tipo': tipo,
+        'titulo': titulo,
+        'mes': mes,
+        'data': data,
+        'hora': hora,
+        'texto': texto,
+        'registros': registros.map((r) => r.toJson()).toList(),
+        'incluirMovimentos': incluirMovimentos,
+        'periodoIni': periodoIni,
+        'periodoFim': periodoFim,
+        'assinaturasMembros': assinaturasMembros,
+        'criadoEm': criadoEm,
+        'atualizadoEm': atualizadoEm,
+      };
+
+  factory Ata.fromJson(Map<String, dynamic> json) => Ata(
+        id: _str(json['id']),
+        tipo: _str(json['tipo'], 'ordinaria'),
+        titulo: _str(json['titulo']),
+        mes: _str(json['mes']),
+        data: _str(json['data']),
+        hora: json['hora'] == null ? -1 : _int(json['hora']),
+        texto: _str(json['texto']),
+        registros: _lista(json['registros']).map((r) => RegistroAta.fromJson(_mapa(r))).toList(),
+        incluirMovimentos: json['incluirMovimentos'] as bool? ?? true,
+        periodoIni: _str(json['periodoIni']),
+        periodoFim: _str(json['periodoFim']),
+        assinaturasMembros: json['assinaturasMembros'] as bool? ?? false,
+        criadoEm: _int(json['criadoEm']),
+        atualizadoEm: _int(json['atualizadoEm']),
+      );
+}
+
+// ---------------------------------------------------------------------------
 // Banco: cadastro geral de membros + congregações + campos extras + listas
 // ---------------------------------------------------------------------------
 
@@ -625,6 +784,8 @@ class Banco {
   List<Compromisso> compromissos; // Mural: lembretes e eventos
   List<Aviso> avisos; // Mural: avisos
   List<DataIgreja> datasIgreja; // Mural: datas comemorativas da igreja
+  List<Ata> atas; // relatórios de reunião
+  List<Movimento> movimentos; // entradas e saídas de membros
 
   // Opção multicongregacional (serve para todas as congregações)
   bool multiAtiva;
@@ -643,6 +804,8 @@ class Banco {
     List<Compromisso>? compromissos,
     List<Aviso>? avisos,
     List<DataIgreja>? datasIgreja,
+    List<Ata>? atas,
+    List<Movimento>? movimentos,
     this.multiAtiva = true,
     this.multiNome = 'Multicongregacional',
     this.multiCor = '#8E24AA',
@@ -655,7 +818,9 @@ class Banco {
         listas = listas ?? [],
         compromissos = compromissos ?? [],
         avisos = avisos ?? [],
-        datasIgreja = datasIgreja ?? [];
+        datasIgreja = datasIgreja ?? [],
+        atas = atas ?? [],
+        movimentos = movimentos ?? [];
 
   /// Banco vazio de primeira execução (com dois campos extras de exemplo).
   factory Banco.novo() {
@@ -729,16 +894,16 @@ class Banco {
     if (l.tipo == 'aniversariantes') {
       return membros.where((m) {
         final n = m.dataNascimento;
-        if (n == null) return false;
+        if (!m.ativo || n == null) return false;
         return l.meses.isEmpty || l.meses.contains(n.month);
       }).toList();
     }
-    if (l.tipo == 'classes') return List<Entidade>.of(membros);
+    if (l.tipo == 'classes') return membros.where((m) => m.ativo).toList();
 
     final porId = {for (final m in membros) m.id: m};
     return [
       for (final id in l.membroIds)
-        if (porId[id] != null) porId[id]!
+        if (porId[id] != null && porId[id]!.ativo) porId[id]!
     ];
   }
 
@@ -752,6 +917,8 @@ class Banco {
     compromissos = o.compromissos;
     avisos = o.avisos;
     datasIgreja = o.datasIgreja;
+    atas = o.atas;
+    movimentos = o.movimentos;
     multiAtiva = o.multiAtiva;
     multiNome = o.multiNome;
     multiCor = o.multiCor;
@@ -759,14 +926,76 @@ class Banco {
     ordemMembros = o.ordemMembros;
   }
 
-  /// Insere um membro novo ou substitui o que tem o mesmo id.
+  /// Membros em atividade (não desligados).
+  List<Entidade> get ativos => membros.where((m) => m.ativo).toList();
+
+  String _hoje() => isoData(DateTime.now());
+
+  void _registrar(Entidade m, String tipo, String data, String motivo) {
+    movimentos.add(Movimento(
+      id: const Uuid().v4(),
+      membroId: m.id,
+      nome: m.nome,
+      tipo: tipo,
+      data: data,
+      motivo: motivo,
+    ));
+  }
+
+  /// Insere um membro novo (registrando a ENTRADA) ou substitui o que tem o mesmo id.
   void salvarMembro(Entidade novo) {
     final i = membros.indexWhere((m) => m.id == novo.id);
     if (i >= 0) {
       membros[i] = novo;
     } else {
       membros.add(novo);
+      _registrar(novo, 'entrada', _hoje(), '');
     }
+  }
+
+  /// Desliga o membro (ele continua no cadastro) e registra a SAÍDA.
+  void desligar(Entidade m, DateTime data, String motivo) {
+    m.ativo = false;
+    m.dataSaida = isoData(data);
+    m.motivoSaida = motivo;
+    m.atualizadoEm = DateTime.now().millisecondsSinceEpoch;
+    _registrar(m, 'saida', isoData(data), motivo);
+  }
+
+  /// Reativa um membro desligado e registra uma ENTRADA (reintegração).
+  void reativar(Entidade m, DateTime data) {
+    m.ativo = true;
+    m.dataSaida = '';
+    m.motivoSaida = '';
+    m.atualizadoEm = DateTime.now().millisecondsSinceEpoch;
+    _registrar(m, 'entrada', isoData(data), 'Reintegração');
+  }
+
+  /// Movimentos de membros que caem no período da ata.
+  List<Movimento> movimentosDaAta(Ata a) {
+    DateTime? ini;
+    DateTime? fim;
+    if (a.tipo == 'ordinaria') {
+      final p = a.mes.split('-');
+      if (p.length == 2) {
+        final y = int.tryParse(p[0]);
+        final m = int.tryParse(p[1]);
+        if (y != null && m != null) {
+          ini = DateTime.utc(y, m, 1);
+          fim = DateTime.utc(y, m + 1, 0);
+        }
+      }
+    } else {
+      ini = parseNascimento(a.periodoIni);
+      fim = parseNascimento(a.periodoFim) ?? ini;
+    }
+    if (ini == null || fim == null) return [];
+    final r = movimentos.where((mv) {
+      final d = parseNascimento(mv.data);
+      return d != null && !d.isBefore(ini!) && !d.isAfter(fim!);
+    }).toList();
+    r.sort((x, y) => x.data.compareTo(y.data));
+    return r;
   }
 
   /// Apaga o membro do cadastro e de todas as listas.
@@ -790,6 +1019,8 @@ class Banco {
         'compromissos': compromissos.map((c) => c.toJson()).toList(),
         'avisos': avisos.map((a) => a.toJson()).toList(),
         'datasIgreja': datasIgreja.map((d) => d.toJson()).toList(),
+        'atas': atas.map((a) => a.toJson()).toList(),
+        'movimentos': movimentos.map((m) => m.toJson()).toList(),
         'multiAtiva': multiAtiva,
         'multiNome': multiNome,
         'multiCor': multiCor,
@@ -817,6 +1048,9 @@ class Banco {
       avisos: _lista(json['avisos']).map((a) => Aviso.fromJson(_mapa(a))).toList(),
       datasIgreja:
           _lista(json['datasIgreja']).map((d) => DataIgreja.fromJson(_mapa(d))).toList(),
+      atas: _lista(json['atas']).map((a) => Ata.fromJson(_mapa(a))).toList(),
+      movimentos:
+          _lista(json['movimentos']).map((m) => Movimento.fromJson(_mapa(m))).toList(),
       multiAtiva: json['multiAtiva'] as bool? ?? true,
       multiNome: _str(json['multiNome'], 'Multicongregacional'),
       multiCor: _str(json['multiCor'], '#8E24AA'),

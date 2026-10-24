@@ -77,8 +77,8 @@ class _AniversariosPageState extends State<AniversariosPage> {
     final esquema = Theme.of(context).colorScheme;
     final hoje = DateTime.now();
 
-    final comData = _banco.membros.where((m) => m.dataNascimento != null).toList();
-    final semData = _banco.membros.where((m) => m.dataNascimento == null).toList();
+    final comData = _banco.ativos.where((m) => m.dataNascimento != null).toList();
+    final semData = _banco.ativos.where((m) => m.dataNascimento == null).toList();
     final base = _filtro.aplicar(_banco, comData);
 
     int porNome(Entidade a, Entidade b) =>

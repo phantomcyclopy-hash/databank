@@ -24,9 +24,10 @@ Future<void> imprimirComOpcoes(
   required String tituloInicial,
   String? layout,
   bool ficha = false,
+  Ata? ata,
   required void Function(String) aviso,
 }) async {
-  if (membros.isEmpty) {
+  if (membros.isEmpty && ata == null) {
     aviso('Não há membros para imprimir.');
     return;
   }
@@ -37,13 +38,16 @@ Future<void> imprimirComOpcoes(
         banco: banco,
         lista: lista,
         tituloInicial: tituloInicial,
-        layoutInicial: ficha ? 'fichas' : layout,
-        mostrarLayout: !ficha,
+        layoutInicial: ata != null ? 'ata' : (ficha ? 'fichas' : layout),
+        mostrarLayout: !ficha && ata == null,
+        dataEvento: ata?.data ?? '',
+        horaEvento: ata?.hora ?? -1,
       ),
     ),
   );
   if (res == null) return;
   if (ficha) res.cfg.layout = 'fichas';
+  if (ata != null) res.cfg.layout = 'ata';
   if (res.cfg.layout == 'assinaturas' && !membros.any((m) => m.requerAssinatura)) {
     aviso('Nenhum membro marcado como "requer assinatura".');
     return;
@@ -56,6 +60,7 @@ Future<void> imprimirComOpcoes(
       membros: membros,
       titulo: res.titulo,
       cfg: res.cfg,
+      ata: ata,
     );
     final nome = res.titulo.isEmpty ? 'ibmmkar' : res.titulo.replaceAll(RegExp(r'[^\w\-]+'), '_');
     await Printing.layoutPdf(onLayout: (_) async => bytes, name: '$nome.pdf');
@@ -76,6 +81,10 @@ class OpcoesImpressaoPage extends StatefulWidget {
   final bool mostrarLayout;
   final String? layoutInicial;
 
+  /// Data/hora do documento quando não vêm de uma lista (ex.: data da ata).
+  final String dataEvento;
+  final int horaEvento;
+
   const OpcoesImpressaoPage({
     super.key,
     required this.banco,
@@ -84,6 +93,8 @@ class OpcoesImpressaoPage extends StatefulWidget {
     this.modoConfig = false,
     this.mostrarLayout = true,
     this.layoutInicial,
+    this.dataEvento = '',
+    this.horaEvento = -1,
   });
 
   @override
@@ -111,15 +122,17 @@ class _OpcoesImpressaoPageState extends State<OpcoesImpressaoPage> {
     // ou são as atuais. Assim a escolha de uma impressão não "vaza" para outra.
     if (!widget.modoConfig) {
       final l = widget.lista;
-      if (l != null && parseNascimento(l.dataEvento) != null) {
+      final dEv = l?.dataEvento ?? widget.dataEvento;
+      final hEv = l?.horaEvento ?? widget.horaEvento;
+      if (parseNascimento(dEv) != null) {
         cfg.dataModo = 'escolhida';
-        cfg.dataEscolhida = l.dataEvento;
+        cfg.dataEscolhida = dEv;
       } else {
         cfg.dataModo = 'hoje';
       }
-      if (l != null && l.horaEvento >= 0) {
+      if (hEv >= 0) {
         cfg.horaModo = 'escolhida';
-        cfg.horaEscolhida = l.horaEvento;
+        cfg.horaEscolhida = hEv;
       } else {
         cfg.horaModo = 'agora';
       }
@@ -294,6 +307,7 @@ class _OpcoesImpressaoPageState extends State<OpcoesImpressaoPage> {
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Tipo de relatório'),
                   items: PdfService.layouts.entries
+                      .where((e) => e.key != 'ata') // a ata só é impressa pela área Atas
                       .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
                       .toList(),
                   onChanged: (v) => setState(() => cfg.layout = v ?? 'simples'),

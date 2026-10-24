@@ -11,6 +11,7 @@ import '../models.dart';
 import '../widgets/campos_extras_dialog.dart';
 import '../widgets/classes_dialog.dart';
 import '../widgets/congregacoes_dialog.dart';
+import '../widgets/desligar_dialog.dart';
 import '../widgets/dialogos.dart';
 import '../widgets/form_membro.dart';
 import '../widgets/membro_widgets.dart';
@@ -249,6 +250,34 @@ class _MembrosPageState extends State<MembrosPage> {
     widget.onSalvar();
   }
 
+  /// Desligar mantém o membro no cadastro (pode voltar) e registra a SAÍDA.
+  Future<void> _desligar(Entidade m) async {
+    final info = await pedirDesligamento(context, m);
+    if (info == null) return;
+    _banco.desligar(m, info.data, info.motivo);
+    widget.onSalvar();
+    _snack('${m.nome} foi desligado. A saída entrou no movimento do mês.');
+  }
+
+  Future<void> _reativar(Entidade m) async {
+    final ok = await confirmar(
+      context,
+      titulo: 'Reativar membro?',
+      mensagem: '"${m.nome}" volta às listas e contagens, e a entrada é registrada hoje.',
+      acao: 'Reativar',
+      destrutivo: false,
+    );
+    if (!ok) return;
+    _banco.reativar(m, DateTime.now());
+    widget.onSalvar();
+  }
+
+  String? _etiquetaDesligado(Entidade m) {
+    if (m.ativo) return null;
+    final d = parseNascimento(m.dataSaida);
+    return 'Desligado${d == null ? '' : ' em ${dataBr(d)}'}${m.motivoSaida.isEmpty ? '' : ' · ${m.motivoSaida}'}';
+  }
+
   void _imprimirFicha(Entidade m) {
     imprimirComOpcoes(
       context,
@@ -425,12 +454,18 @@ class _MembrosPageState extends State<MembrosPage> {
       onSelected: (v) {
         if (v == 'editar') _editar(m);
         if (v == 'ficha') _imprimirFicha(m);
+        if (v == 'desligar') _desligar(m);
+        if (v == 'reativar') _reativar(m);
         if (v == 'excluir') _excluir(m);
       },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: 'editar', child: Text('Editar')),
-        PopupMenuItem(value: 'ficha', child: Text('Imprimir ficha')),
-        PopupMenuItem(value: 'excluir', child: Text('Excluir membro')),
+      itemBuilder: (_) => [
+        const PopupMenuItem(value: 'editar', child: Text('Editar')),
+        const PopupMenuItem(value: 'ficha', child: Text('Imprimir ficha')),
+        if (m.ativo)
+          const PopupMenuItem(value: 'desligar', child: Text('Desligar membro (saída)'))
+        else
+          const PopupMenuItem(value: 'reativar', child: Text('Reativar membro')),
+        const PopupMenuItem(value: 'excluir', child: Text('Excluir membro (apagar)')),
       ],
     );
   }
@@ -440,6 +475,8 @@ class _MembrosPageState extends State<MembrosPage> {
   @override
   Widget build(BuildContext context) {
     final todos = _banco.membros;
+    final ativosTodos = todos.where((m) => m.ativo).toList();
+    final totalExibivel = _filtro.mostrarDesligados ? todos.length : ativosTodos.length;
     final visiveis = _filtro.aplicar(_banco, todos);
     final esquema = Theme.of(context).colorScheme;
 
@@ -548,6 +585,7 @@ class _MembrosPageState extends State<MembrosPage> {
                   banco: _banco,
                   membro: m,
                   corPadrao: kCorSemCong,
+                  etiqueta: _etiquetaDesligado(m),
                   selecionado: _modoSel && _sel.contains(m.id),
                   leading: _modoSel
                       ? Checkbox(value: _sel.contains(m.id), onChanged: (_) => _alternar(m))
@@ -563,7 +601,7 @@ class _MembrosPageState extends State<MembrosPage> {
           return Column(
             children: [
               _bannerAniversarios(),
-              DashboardCongregacoes(banco: _banco, origem: todos, corPadrao: kCorSemCong),
+              DashboardCongregacoes(banco: _banco, origem: ativosTodos, corPadrao: kCorSemCong),
               PainelBuscaFiltros(
                 banco: _banco,
                 filtro: _filtro,
@@ -579,9 +617,9 @@ class _MembrosPageState extends State<MembrosPage> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      visiveis.length == todos.length
-                          ? '${todos.length} membro(s)'
-                          : '${visiveis.length} de ${todos.length} membro(s)',
+                      visiveis.length == totalExibivel
+                          ? '$totalExibivel membro(s)'
+                          : '${visiveis.length} de $totalExibivel membro(s)',
                       style: TextStyle(fontSize: 12, color: esquema.onSurfaceVariant),
                     ),
                   ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'pages/aniversarios_page.dart';
+import 'pages/atas_page.dart';
 import 'pages/listas_page.dart';
 import 'pages/mural_page.dart';
 import 'pages/membros_page.dart';
@@ -184,6 +185,7 @@ class _HomePageState extends State<HomePage> {
             onVerAniversarios: _abrirAniversarios,
           ),
           ListasPage(banco: banco, onSalvar: _salvar, onAparencia: _aparencia),
+          AtasPage(banco: banco, onSalvar: _salvar, onAparencia: _aparencia),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -208,6 +210,11 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.description_outlined),
             selectedIcon: Icon(Icons.description),
             label: 'Listas',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.event_note_outlined),
+            selectedIcon: Icon(Icons.event_note),
+            label: 'Atas',
           ),
         ],
       ),

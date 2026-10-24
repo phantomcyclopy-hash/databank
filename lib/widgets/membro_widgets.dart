@@ -42,11 +42,14 @@ class FiltroMembros {
   /// true = o membro precisa passar em TODAS as categorias marcadas (E);
   /// false = basta passar em UMA (OU).
   bool combinarE = true;
+
+  /// Desligados ficam escondidos, a menos que se peça para mostrá-los.
+  bool mostrarDesligados = false;
   String ordem;
 
   FiltroMembros({this.ordem = 'az'});
 
-  int get categoriasAtivas => [congregacoes, sexos, sangues, faixas, classes, assinatura, fotos, campos]
+  int get categoriasAtivas => (mostrarDesligados ? 1 : 0) + [congregacoes, sexos, sangues, faixas, classes, assinatura, fotos, campos]
       .where((s) => s.isNotEmpty)
       .length;
 
@@ -58,6 +61,7 @@ class FiltroMembros {
     sangues.clear();
     faixas.clear();
     classes.clear();
+    mostrarDesligados = false;
     assinatura.clear();
     fotos.clear();
     campos.clear();
@@ -95,6 +99,7 @@ class FiltroMembros {
     final q = normalizarTexto(busca);
     final r = origem.where((m) {
       if (q.isNotEmpty && !normalizarTexto(m.nome).contains(q)) return false;
+      if (!m.ativo && !mostrarDesligados) return false;
 
       final criterios = <bool>[];
       if (congregacoes.isNotEmpty) criterios.add(_passaCong(banco, m));
@@ -659,6 +664,17 @@ Future<void> mostrarFiltrosAvancados(
                     f.classes,
                   ),
                   grupo('Assinatura', const [MapEntry('sim', 'Requer assinatura')], f.assinatura),
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('Mostrar membros desligados'),
+                    value: f.mostrarDesligados,
+                    onChanged: (v) {
+                      setS(() => f.mostrarDesligados = v ?? false);
+                      onMudou();
+                    },
+                  ),
                   grupo('Foto', const [MapEntry('com', 'Com foto'), MapEntry('sem', 'Sem foto')], f.fotos),
                   if (checkboxes.isNotEmpty)
                     grupo('Campos extras marcados',
@@ -773,12 +789,12 @@ Widget gradeMembros({
 
 List<Entidade> aniversariantesDeHoje(Banco banco) {
   final h = DateTime.now();
-  return banco.membros.where((m) => m.diasParaAniversario(h) == 0).toList();
+  return banco.ativos.where((m) => m.diasParaAniversario(h) == 0).toList();
 }
 
 int aniversariantesProximos(Banco banco, {int dias = 7}) {
   final h = DateTime.now();
-  return banco.membros.where((m) {
+  return banco.ativos.where((m) {
     final d = m.diasParaAniversario(h);
     return d != null && d >= 1 && d <= dias;
   }).length;

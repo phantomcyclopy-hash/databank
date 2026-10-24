@@ -21,6 +21,7 @@ class PdfService {
     'agrupado': 'Agrupado por congregação',
     'aniversariantes': 'Aniversariantes por mês',
     'classes': 'Por classes da EBD (matrícula)',
+    'ata': 'Ata de reunião',
   };
 
   static const Map<String, String> camposDisponiveis = {
@@ -45,6 +46,7 @@ class PdfService {
     'agrupado': 'Membros por congregação',
     'aniversariantes': 'Aniversariantes',
     'classes': 'Matrícula por classes da EBD',
+    'ata': 'Ata de reunião',
   };
 
   // ------------------------------------------------------------- utilitários
@@ -464,6 +466,179 @@ class PdfService {
     ];
   }
 
+  // ---------------------------------------------------------------------- ata
+
+  /// Troca aspas/travessões "bonitos" (comuns em textos do Word) por equivalentes
+  /// que a fonte padrão do PDF consegue desenhar.
+  static String limpar(String s) {
+    return s
+        .replaceAll('\u201C', '"')
+        .replaceAll('\u201D', '"')
+        .replaceAll('\u2018', "'")
+        .replaceAll('\u2019', "'")
+        .replaceAll('\u2013', '-')
+        .replaceAll('\u2014', '-')
+        .replaceAll('\u2026', '...')
+        .replaceAll('\u2022', '-')
+        .replaceAll('\u00A0', ' ')
+        .replaceAll('\t', '    ');
+  }
+
+  static String _rotuloMes(String mes) {
+    final p = mes.split('-');
+    if (p.length != 2) return '';
+    final m = int.tryParse(p[1]);
+    if (m == null || m < 1 || m > 12) return '';
+    return ' · ${kMeses[m - 1]}/${p[0]}';
+  }
+
+  static pw.Widget _secaoTitulo(String texto, PdfColor cor) => pw.Container(
+        margin: const pw.EdgeInsets.only(top: 12, bottom: 6),
+        padding: const pw.EdgeInsets.only(bottom: 3),
+        decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: cor, width: 1))),
+        child: pw.Text(texto, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+      );
+
+  static pw.Widget _subtitulo(String texto) => pw.Padding(
+        padding: const pw.EdgeInsets.only(top: 6, bottom: 4),
+        child: pw.Text(texto, style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+      );
+
+  /// Marcação simples das anotações: "# Título", "## Subtítulo", "- item",
+  /// **negrito** e linhas em branco.
+  static List<pw.Widget> _renderTexto(String texto) {
+    pw.Widget paragrafo(String linha, {double tamanho = 11, bool negritoTodo = false}) {
+      final partes = linha.split('**');
+      final spans = <pw.InlineSpan>[];
+      for (var i = 0; i < partes.length; i++) {
+        if (partes[i].isEmpty) continue;
+        final negrito = negritoTodo || i.isOdd;
+        spans.add(pw.TextSpan(
+          text: partes[i],
+          style: pw.TextStyle(
+              fontSize: tamanho, fontWeight: negrito ? pw.FontWeight.bold : pw.FontWeight.normal),
+        ));
+      }
+      return pw.RichText(text: pw.TextSpan(children: spans));
+    }
+
+    final out = <pw.Widget>[];
+    for (final bruta in limpar(texto).split('\n')) {
+      final l = bruta.trimRight();
+      if (l.trim().isEmpty) {
+        out.add(pw.SizedBox(height: 6));
+      } else if (l.startsWith('## ')) {
+        out.add(pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 4, bottom: 2),
+            child: paragrafo(l.substring(3), tamanho: 12, negritoTodo: true)));
+      } else if (l.startsWith('# ')) {
+        out.add(pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 6, bottom: 3),
+            child: paragrafo(l.substring(2), tamanho: 14, negritoTodo: true)));
+      } else if (l.startsWith('- ')) {
+        out.add(pw.Padding(
+          padding: const pw.EdgeInsets.only(left: 12, bottom: 2),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('-  ', style: const pw.TextStyle(fontSize: 11)),
+              pw.Expanded(child: paragrafo(l.substring(2))),
+            ],
+          ),
+        ));
+      } else {
+        out.add(pw.Padding(padding: const pw.EdgeInsets.only(bottom: 3), child: paragrafo(l)));
+      }
+    }
+    return out;
+  }
+
+  static String _ddmm(String iso) {
+    final d = parseNascimento(iso);
+    if (d == null) return '-';
+    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  }
+
+  static List<pw.Widget> _corpoAta(Banco banco, Ata a, PdfColor cor) {
+    final out = <pw.Widget>[];
+
+    // Movimento de membros (automático)
+    if (a.incluirMovimentos) {
+      final mv = banco.movimentosDaAta(a);
+      final entradas = mv.where((m) => m.tipo == 'entrada').toList();
+      final saidas = mv.where((m) => m.tipo == 'saida').toList();
+      out.add(_secaoTitulo('Movimento de membros', cor));
+      if (mv.isEmpty) {
+        out.add(pw.Text('Nenhuma entrada ou saída no período.',
+            style: const pw.TextStyle(fontSize: 11)));
+      }
+      if (entradas.isNotEmpty) {
+        out.add(_subtitulo('Entradas (${entradas.length})'));
+        out.add(_tabela(
+          cor,
+          ['Data', 'Nome', 'Observação'],
+          entradas
+              .map((m) => [_txt(_ddmm(m.data)), _txt(limpar(m.nome), negrito: true), _txt(limpar(m.motivo))])
+              .toList(),
+          {
+            0: const pw.FixedColumnWidth(44),
+            1: const pw.FlexColumnWidth(3),
+            2: const pw.FlexColumnWidth(2),
+          },
+        ));
+      }
+      if (saidas.isNotEmpty) {
+        out.add(_subtitulo('Saídas (${saidas.length})'));
+        out.add(_tabela(
+          cor,
+          ['Data', 'Nome', 'Motivo'],
+          saidas
+              .map((m) => [_txt(_ddmm(m.data)), _txt(limpar(m.nome), negrito: true), _txt(limpar(m.motivo))])
+              .toList(),
+          {
+            0: const pw.FixedColumnWidth(44),
+            1: const pw.FlexColumnWidth(3),
+            2: const pw.FlexColumnWidth(2),
+          },
+        ));
+      }
+    }
+
+    // Registros por categoria
+    if (a.registros.isNotEmpty) {
+      out.add(_secaoTitulo('Registros', cor));
+      for (final cat in kCategoriasRegistro.keys) {
+        final l = a.registros.where((r) => r.categoria == cat).toList()
+          ..sort((x, y) => x.data.compareTo(y.data));
+        if (l.isEmpty) continue;
+        out.add(_subtitulo('${kCategoriasRegistro[cat]} (${l.length})'));
+        for (final r in l) {
+          out.add(pw.Padding(
+            padding: const pw.EdgeInsets.only(left: 8, bottom: 3),
+            child: pw.Text('${_ddmm(r.data)} - ${limpar(r.texto)}',
+                style: const pw.TextStyle(fontSize: 11)),
+          ));
+        }
+      }
+    }
+
+    // Anotações livres
+    if (a.texto.trim().isNotEmpty) {
+      out.add(_secaoTitulo('Anotações', cor));
+      out.addAll(_renderTexto(a.texto));
+    }
+
+    // Assinaturas dos membros que requerem
+    if (a.assinaturasMembros) {
+      final quem = banco.ativos.where((m) => m.requerAssinatura).toList();
+      out.add(_secaoTitulo('Assinaturas', cor));
+      out.addAll(_assinaturas(banco, quem, cor));
+    }
+
+    if (out.isEmpty) out.add(pw.Text('Ata sem conteúdo.'));
+    return out;
+  }
+
   static pw.Page _capa({
     required PdfPageFormat formato,
     required pw.EdgeInsets margem,
@@ -506,8 +681,9 @@ class PdfService {
                     style: grande
                         ? pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)
                         : const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
-              pw.Text('$total membro(s)',
-                  style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+              if (total >= 0)
+                pw.Text('$total membro(s)',
+                    style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
             ],
           ),
         ),
@@ -523,6 +699,7 @@ class PdfService {
     required List<Entidade> membros,
     required String titulo,
     required ConfigPdf cfg,
+    Ata? ata,
   }) async {
     final pdf = pw.Document();
     final mm = PdfPageFormat.mm;
@@ -541,7 +718,12 @@ class PdfService {
     final horaStr = _horaStr(lista, cfg);
     final dh = [dataStr, horaStr].where((e) => e.isNotEmpty).join(' ');
     final grande = cfg.dataHoraGrande && dh.isNotEmpty;
-    final legenda = _legendas[cfg.layout] ?? 'Relatório';
+    var legenda = _legendas[cfg.layout] ?? 'Relatório';
+    if (cfg.layout == 'ata' && ata != null) {
+      legenda = ata.tipo == 'ordinaria'
+          ? 'Ata ordinária${_rotuloMes(ata.mes)}'
+          : 'Ata extraordinária';
+    }
     final carimbo = cfg.usarCarimbo ? _img(cfg.carimboBase64) : null;
     final altCarimbo = cfg.tamanhoCarimbo * mm;
 
@@ -558,7 +740,7 @@ class PdfService {
         horaStr: horaStr,
         grande: grande,
         legenda: legenda,
-        total: itens.length,
+        total: cfg.layout == 'ata' ? -1 : itens.length,
       ));
     }
 
@@ -649,6 +831,9 @@ class PdfService {
         break;
       case 'classes':
         corpo.addAll(_classes(banco, itens, corLista));
+        break;
+      case 'ata':
+        if (ata != null) corpo.addAll(_corpoAta(banco, ata, corLista));
         break;
       default:
         corpo.add(_tabelaLista(
