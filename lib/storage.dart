@@ -84,6 +84,20 @@ class AppStorage {
     await _store.record('config_pdf').put(db, cfg.toJson());
   }
 
+  /// Registros genéricos (nuvem, retratos de sincronização...).
+  Future<Map<String, dynamic>?> lerMapa(String chave) async {
+    final db = _db;
+    if (db == null) return null;
+    final m = await _store.record(chave).get(db);
+    return m == null ? null : Map<String, dynamic>.from(m);
+  }
+
+  Future<void> gravarMapa(String chave, Map<String, dynamic> valor) async {
+    final db = _db;
+    if (db == null) return;
+    await _store.record(chave).put(db, valor);
+  }
+
   Future<void> salvarTema(String novo) async {
     tema = novo;
     final db = _db;

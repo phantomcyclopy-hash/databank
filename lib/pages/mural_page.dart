@@ -10,7 +10,9 @@ import '../widgets/compromisso_tile.dart';
 import '../widgets/dialogos.dart';
 import '../widgets/membro_widgets.dart';
 import '../widgets/mural_dialogs.dart';
+import '../nuvem/sync_service.dart';
 import 'agenda_page.dart';
+import 'nuvem_page.dart';
 
 class _Ocorrencia {
   final DateTime dia;
@@ -416,6 +418,35 @@ class MuralPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Mural'),
         actions: [
+          ListenableBuilder(
+            listenable: Sync.instance,
+            builder: (context, _) {
+              final s = Sync.instance;
+              final IconData icone;
+              final String dica;
+              if (!s.pronto) {
+                icone = Icons.cloud_off_outlined;
+                dica = 'Nuvem: não conectada';
+              } else if (s.ocupado) {
+                icone = Icons.cloud_sync_outlined;
+                dica = 'Sincronizando...';
+              } else if (s.erro != null) {
+                icone = Icons.cloud_off;
+                dica = 'Nuvem: ${s.erro}';
+              } else {
+                icone = Icons.cloud_done_outlined;
+                dica = 'Nuvem: sincronizado';
+              }
+              return IconButton(
+                icon: Icon(icone),
+                tooltip: dica,
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NuvemPage()),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.calendar_month_outlined),
             tooltip: 'Agenda (calendário)',

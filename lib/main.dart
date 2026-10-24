@@ -6,6 +6,7 @@ import 'pages/atas_page.dart';
 import 'pages/listas_page.dart';
 import 'pages/mural_page.dart';
 import 'pages/membros_page.dart';
+import 'nuvem/sync_service.dart';
 import 'storage.dart';
 import 'widgets/membro_widgets.dart';
 
@@ -16,6 +17,11 @@ Future<void> main() async {
   } catch (e) {
     // Sem banco o app abre, mas nada será salvo.
     debugPrint('Falha ao abrir o banco local: $e');
+  }
+  try {
+    await Sync.instance.carregar();
+  } catch (e) {
+    debugPrint('Falha ao carregar a configuração da nuvem: $e');
   }
   runApp(const IBMMKARApp());
 }
@@ -91,20 +97,41 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Banco? _banco;
   int _aba = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _carregar();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Ao voltar para o app, confere a nuvem.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && Sync.instance.automatico) {
+      Sync.instance.sincronizar();
+    }
   }
 
   Future<void> _carregar() async {
     final b = await AppStorage.instance.carregarBanco();
     if (!mounted) return;
     setState(() => _banco = b);
+    // Dados vindos da nuvem: redesenha e grava só localmente (sem reenviar).
+    Sync.instance.vincular(b, () {
+      if (!mounted) return;
+      setState(() {});
+      AppStorage.instance.salvarBanco(b);
+    });
   }
 
   /// Atualiza as telas e grava tudo no banco local.
@@ -112,6 +139,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {});
     final b = _banco;
     if (b != null) AppStorage.instance.salvarBanco(b);
+    Sync.instance.agendarEnvio();
   }
 
   /// Tela completa de aniversariantes (aberta a partir do Mural e dos Membros).

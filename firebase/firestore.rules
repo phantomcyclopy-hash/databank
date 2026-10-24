@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() {
+      return request.auth != null;
+    }
+
+    // Quem tem um registro em igrejas/{igreja}/usuarios/{seu uid} é do espaço.
+    function membroDe(igreja) {
+      return logado()
+        && exists(/databases/$(database)/documents/igrejas/$(igreja)/usuarios/$(request.auth.uid));
+    }
+
+    match /igrejas/{igreja} {
+      allow create: if logado();
+      allow read, update: if membroDe(igreja);
+      allow delete: if false;
+
+      // Entrar no espaço = criar o próprio registro informando o código certo.
+      match /usuarios/{uid} {
+        allow read: if membroDe(igreja);
+        allow create: if logado()
+          && request.auth.uid == uid
+          && request.resource.data.codigo
+             == getAfter(/databases/$(database)/documents/igrejas/$(igreja)).data.codigo;
+        allow update, delete: if false;
+      }
+
+      // Dados da igreja (membros, listas, atas, avisos, etc.)
+      match /{colecao}/{documento} {
+        allow read, write: if membroDe(igreja) && colecao != 'usuarios';
+      }
+    }
+  }
+}
