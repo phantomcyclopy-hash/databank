@@ -1,4 +1,4 @@
-name: Build IBMMKAR App
+name: Build IBMMK App
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4
         with:
-          name: IBMMKAR-Android-APK
+          name: IBMMK-Android-APK
           path: build/app/outputs/flutter-apk/app-release.apk
 
   build-windows:
@@ -36,5 +36,5 @@ jobs:
       - run: flutter build windows --release
       - uses: actions/upload-artifact@v4
         with:
-          name: IBMMKAR-Windows-EXE
+          name: IBMMK-Windows-EXE
           path: build/windows/x64/runner/Release/
