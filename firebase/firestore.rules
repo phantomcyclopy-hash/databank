@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() {
+      return request.auth != null;
+    }
+
+    // Conta principal (dona do espaço): pode tudo e concede permissões.
+    function dono() {
+      return logado() && request.auth.token.email == 'ibmmkarsecretaria@gmail.com';
+    }
+
+    function temPerfil(igreja) {
+      return logado()
+        && exists(/databases/$(database)/documents/igrejas/$(igreja)/usuarios/$(request.auth.uid));
+    }
+
+    function papelDe(igreja) {
+      return get(/databases/$(database)/documents/igrejas/$(igreja)/usuarios/$(request.auth.uid))
+        .data.get('papel', 'membro');
+    }
+
+    // Qualquer conta sem bloqueio: lê o que é público (mural, agenda, cultos...).
+    function ativo(igreja) {
+      return dono() || (temPerfil(igreja) && papelDe(igreja) != 'bloqueado');
+    }
+
+    // Secretaria: lê e grava tudo.
+    function edita(igreja) {
+      return dono() || (temPerfil(igreja) && papelDe(igreja) == 'secretaria');
+    }
+
+    // Inspetor: lê tudo, não grava nada.
+    function veTudo(igreja) {
+      return edita(igreja) || (temPerfil(igreja) && papelDe(igreja) == 'inspetor');
+    }
+
+    match /igrejas/{igreja} {
+      allow read: if logado();
+      allow write: if dono();
+
+      match /usuarios/{uid} {
+        allow read: if logado() && (request.auth.uid == uid || veTudo(igreja));
+
+        // Toda conta nova entra como "membro". Só a conta principal muda o papel.
+        allow create: if dono()
+          || (logado() && request.auth.uid == uid && request.resource.data.papel == 'membro');
+
+        // A própria conta só altera nome, foto, e-mail e o pedido de secretaria.
+        allow update: if dono()
+          || (logado() && request.auth.uid == uid
+              && request.resource.data.diff(resource.data).affectedKeys()
+                   .hasOnly(['nome', 'foto', 'pedido', 'email']));
+
+        allow delete: if dono();
+      }
+
+      // Dados da igreja
+      match /{colecao}/{documento} {
+        allow read: if colecao != 'usuarios' && (
+          (colecao in ['avisos', 'agenda', 'datasIgreja', 'cultos', 'publicacoes', 'contato', 'config'])
+            ? ativo(igreja)
+            : veTudo(igreja));
+        // "Fale conosco" (contato): só a conta dona grava.
+        allow write: if colecao != 'usuarios'
+          && (colecao == 'contato' ? dono() : edita(igreja));
+      }
+    }
+  }
+}

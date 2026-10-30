@@ -14,6 +14,9 @@ class CompromissoTile extends StatelessWidget {
   final bool mostrarData;
   final VoidCallback aoMudar;
 
+  /// Quem não pode editar só consulta (sem marcar, editar ou excluir).
+  final bool somenteLeitura;
+
   const CompromissoTile({
     super.key,
     required this.banco,
@@ -21,9 +24,23 @@ class CompromissoTile extends StatelessWidget {
     required this.dia,
     required this.aoMudar,
     this.mostrarData = true,
+    this.somenteLeitura = false,
   });
 
   bool get _lembrete => compromisso.tipo == 'lembrete';
+
+  static IconData _icone(String categoria) {
+    switch (categoria) {
+      case 'ensaio':
+        return Icons.music_note;
+      case 'reuniao':
+        return Icons.groups;
+      case 'versiculo':
+        return Icons.menu_book;
+      default:
+        return Icons.event;
+    }
+  }
 
   void _concluir() {
     final c = compromisso;
@@ -35,6 +52,27 @@ class CompromissoTile extends StatelessWidget {
       c.feito = !c.feito;
     }
     aoMudar();
+  }
+
+  void _detalhes(BuildContext context) {
+    final c = compromisso;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(c.titulo),
+        content: SingleChildScrollView(
+          child: SelectableText([
+            dataBr(soData(dia)) + (c.horaTexto.isEmpty ? '' : ' · ${c.horaTexto}'),
+            if (c.local.isNotEmpty) 'Local: ${c.local}',
+            if (c.categoria != 'outro') kCategoriasEvento[c.categoria] ?? '',
+            if (c.descricao.isNotEmpty) '\n${c.descricao}',
+          ].join('\n')),
+        ),
+        actions: [
+          FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Fechar')),
+        ],
+      ),
+    );
   }
 
   Future<void> _editar(BuildContext context) async {
@@ -86,10 +124,10 @@ class CompromissoTile extends StatelessWidget {
       ),
       child: ListTile(
         dense: true,
-        onTap: () => _editar(context),
+        onTap: () => somenteLeitura ? _detalhes(context) : _editar(context),
         leading: _lembrete
-            ? Checkbox(value: c.feito, onChanged: (_) => _concluir())
-            : Icon(Icons.event, color: esquema.primary),
+            ? Checkbox(value: c.feito, onChanged: somenteLeitura ? null : (_) => _concluir())
+            : Icon(_icone(c.categoria), color: esquema.primary),
         title: Text(
           c.titulo,
           style: TextStyle(
@@ -109,16 +147,18 @@ class CompromissoTile extends StatelessWidget {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (v) {
-            if (v == 'editar') _editar(context);
-            if (v == 'excluir') _excluir(context);
-          },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'editar', child: Text('Editar')),
-            PopupMenuItem(value: 'excluir', child: Text('Excluir')),
-          ],
-        ),
+        trailing: somenteLeitura
+            ? null
+            : PopupMenuButton<String>(
+                onSelected: (v) {
+                  if (v == 'editar') _editar(context);
+                  if (v == 'excluir') _excluir(context);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'editar', child: Text('Editar')),
+                  PopupMenuItem(value: 'excluir', child: Text('Excluir')),
+                ],
+              ),
       ),
     );
   }

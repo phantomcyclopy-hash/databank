@@ -8,6 +8,9 @@ import 'package:uuid/uuid.dart';
 
 const Color kCorPadrao = Color(0xFF1B2A4A);
 
+/// Cor de destaque padrão do app (o usuário pode trocar em Aparência).
+const Color kCorAppPadrao = Color(0xFF8B6CEF);
+
 /// Cor de quem não tem congregação.
 const Color kCorSemCong = Color(0xFF78909C);
 
@@ -480,6 +483,7 @@ class Compromisso {
   int hora; // minutos desde 00:00, ou -1 (sem hora)
   bool feito;
   String repete; // nao | diario | semanal | mensal | anual
+  String categoria; // eventos: outro | ensaio | reuniao | versiculo
 
   Compromisso({
     required this.id,
@@ -491,6 +495,7 @@ class Compromisso {
     this.hora = -1,
     this.feito = false,
     this.repete = 'nao',
+    this.categoria = 'outro',
   });
 
   DateTime? get dataBase => parseNascimento(data);
@@ -542,6 +547,7 @@ class Compromisso {
         'hora': hora,
         'feito': feito,
         'repete': repete,
+        'categoria': categoria,
       };
 
   factory Compromisso.fromJson(Map<String, dynamic> json) => Compromisso(
@@ -554,6 +560,7 @@ class Compromisso {
         hora: json['hora'] == null ? -1 : _int(json['hora']),
         feito: json['feito'] as bool? ?? false,
         repete: _str(json['repete'], 'nao'),
+        categoria: _str(json['categoria'], 'outro'),
       );
 }
 
@@ -624,6 +631,116 @@ class DataIgreja {
         dia: _int(json['dia']),
         mes: _int(json['mes']),
         ano: _int(json['ano']),
+      );
+}
+
+// ---------------------------------------------------------------------------
+// Cultos da semana (fixos, repetem toda semana) e publicações no Mural
+// ---------------------------------------------------------------------------
+
+const Map<String, String> kCategoriasEvento = {
+  'outro': 'Evento',
+  'ensaio': 'Ensaio',
+  'reuniao': 'Reunião',
+  'versiculo': 'Versículo do dia',
+};
+
+/// Culto fixo da semana. [diaSemana] segue DateTime.weekday (1 = segunda ... 7 = domingo).
+class Culto {
+  String id;
+  int diaSemana;
+  String titulo;
+  int hora; // minutos desde 00:00, ou -1
+  String cronograma; // um item por linha (ex.: "19:00 Abertura")
+
+  Culto({
+    required this.id,
+    required this.diaSemana,
+    required this.titulo,
+    this.hora = -1,
+    this.cronograma = '',
+  });
+
+  String get horaTexto => hora < 0
+      ? ''
+      : '${(hora ~/ 60).toString().padLeft(2, '0')}:${(hora % 60).toString().padLeft(2, '0')}';
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'diaSemana': diaSemana,
+        'titulo': titulo,
+        'hora': hora,
+        'cronograma': cronograma,
+      };
+
+  factory Culto.fromJson(Map<String, dynamic> json) => Culto(
+        id: _str(json['id']),
+        diaSemana: _int(json['diaSemana']).clamp(1, 7),
+        titulo: _str(json['titulo']),
+        hora: json['hora'] == null ? -1 : _int(json['hora']),
+        cronograma: _str(json['cronograma']),
+      );
+}
+
+/// Lista ou ata (ou texto) publicada no Mural até [expiraEm].
+class Publicacao {
+  String id;
+  String tipo; // 'lista' | 'ata' | 'texto'
+  String titulo;
+  String texto;
+  int publicadoEm; // ms
+  String expiraEm; // 'aaaa-mm-dd'
+
+  Publicacao({
+    required this.id,
+    this.tipo = 'texto',
+    required this.titulo,
+    this.texto = '',
+    this.publicadoEm = 0,
+    this.expiraEm = '',
+  });
+
+  bool expirada(DateTime hoje) {
+    final e = parseNascimento(expiraEm);
+    if (e == null) return false;
+    return e.isBefore(DateTime.utc(hoje.year, hoje.month, hoje.day));
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'tipo': tipo,
+        'titulo': titulo,
+        'texto': texto,
+        'publicadoEm': publicadoEm,
+        'expiraEm': expiraEm,
+      };
+
+  factory Publicacao.fromJson(Map<String, dynamic> json) => Publicacao(
+        id: _str(json['id']),
+        tipo: _str(json['tipo'], 'texto'),
+        titulo: _str(json['titulo']),
+        texto: _str(json['texto']),
+        publicadoEm: _int(json['publicadoEm']),
+        expiraEm: _str(json['expiraEm']),
+      );
+}
+
+/// Informações do "Fale conosco" (só a conta dona edita).
+class Contato {
+  String telefone;
+  String email;
+  String endereco;
+
+  Contato({this.telefone = '', this.email = '', this.endereco = ''});
+
+  bool get vazio => telefone.trim().isEmpty && email.trim().isEmpty && endereco.trim().isEmpty;
+
+  Map<String, dynamic> toJson() => {'telefone': telefone, 'email': email, 'endereco': endereco};
+
+  factory Contato.fromJson(Map<String, dynamic> json) => Contato(
+        telefone: _str(json['telefone']),
+        email: _str(json['email']),
+        endereco: _str(json['endereco']),
       );
 }
 
@@ -786,6 +903,9 @@ class Banco {
   List<DataIgreja> datasIgreja; // Mural: datas comemorativas da igreja
   List<Ata> atas; // relatórios de reunião
   List<Movimento> movimentos; // entradas e saídas de membros
+  List<Culto> cultos; // cultos fixos da semana
+  List<Publicacao> publicacoes; // listas/atas publicadas no Mural
+  Contato contato; // "Fale conosco"
 
   // Opção multicongregacional (serve para todas as congregações)
   bool multiAtiva;
@@ -806,6 +926,9 @@ class Banco {
     List<DataIgreja>? datasIgreja,
     List<Ata>? atas,
     List<Movimento>? movimentos,
+    List<Culto>? cultos,
+    List<Publicacao>? publicacoes,
+    Contato? contato,
     this.multiAtiva = true,
     this.multiNome = 'Multicongregacional',
     this.multiCor = '#8E24AA',
@@ -820,7 +943,10 @@ class Banco {
         avisos = avisos ?? [],
         datasIgreja = datasIgreja ?? [],
         atas = atas ?? [],
-        movimentos = movimentos ?? [];
+        movimentos = movimentos ?? [],
+        cultos = cultos ?? [],
+        publicacoes = publicacoes ?? [],
+        contato = contato ?? Contato();
 
   /// Banco vazio de primeira execução (com dois campos extras de exemplo).
   factory Banco.novo() {
@@ -919,11 +1045,22 @@ class Banco {
     datasIgreja = o.datasIgreja;
     atas = o.atas;
     movimentos = o.movimentos;
+    cultos = o.cultos;
+    publicacoes = o.publicacoes;
+    contato = o.contato;
     multiAtiva = o.multiAtiva;
     multiNome = o.multiNome;
     multiCor = o.multiCor;
     multiEmTodas = o.multiEmTodas;
     ordemMembros = o.ordemMembros;
+  }
+
+  /// Remove publicações vencidas (rodado por quem edita).
+  bool limparPublicacoesExpiradas() {
+    final hoje = DateTime.now();
+    final antes = publicacoes.length;
+    publicacoes.removeWhere((p) => p.expirada(hoje));
+    return publicacoes.length != antes;
   }
 
   /// Membros em atividade (não desligados).
@@ -1021,6 +1158,9 @@ class Banco {
         'datasIgreja': datasIgreja.map((d) => d.toJson()).toList(),
         'atas': atas.map((a) => a.toJson()).toList(),
         'movimentos': movimentos.map((m) => m.toJson()).toList(),
+        'cultos': cultos.map((c) => c.toJson()).toList(),
+        'publicacoes': publicacoes.map((p) => p.toJson()).toList(),
+        'contato': contato.toJson(),
         'multiAtiva': multiAtiva,
         'multiNome': multiNome,
         'multiCor': multiCor,
@@ -1051,6 +1191,10 @@ class Banco {
       atas: _lista(json['atas']).map((a) => Ata.fromJson(_mapa(a))).toList(),
       movimentos:
           _lista(json['movimentos']).map((m) => Movimento.fromJson(_mapa(m))).toList(),
+      cultos: _lista(json['cultos']).map((c) => Culto.fromJson(_mapa(c))).toList(),
+      publicacoes:
+          _lista(json['publicacoes']).map((p) => Publicacao.fromJson(_mapa(p))).toList(),
+      contato: json['contato'] is Map ? Contato.fromJson(_mapa(json['contato'])) : null,
       multiAtiva: json['multiAtiva'] as bool? ?? true,
       multiNome: _str(json['multiNome'], 'Multicongregacional'),
       multiCor: _str(json['multiCor'], '#8E24AA'),

@@ -5,7 +5,10 @@ import 'package:uuid/uuid.dart';
 import '../calendario.dart';
 import '../leitor_documentos.dart';
 import '../models.dart';
+import '../nuvem/sync_service.dart';
+import '../publicacao_util.dart';
 import '../widgets/dialogos.dart';
+import '../widgets/publicar_dialog.dart';
 import '../widgets/seletor_data.dart';
 import 'ata_editor_page.dart';
 import 'opcoes_impressao_page.dart';
@@ -275,6 +278,17 @@ class _AtasPageState extends State<AtasPage> {
     );
   }
 
+  void _publicar(Ata a) {
+    publicarNoMural(
+      context,
+      _banco,
+      tipo: 'ata',
+      titulo: a.titulo,
+      texto: textoDaAta(_banco, a),
+      onSalvar: widget.onSalvar,
+    );
+  }
+
   void _menuNova() {
     showModalBottomSheet<void>(
       context: context,
@@ -341,12 +355,18 @@ class _AtasPageState extends State<AtasPage> {
           onSelected: (v) {
             if (v == 'abrir') _abrir(a);
             if (v == 'pdf') _gerarPdf(a);
+            if (v == 'publicar') _publicar(a);
             if (v == 'excluir') _excluir(a);
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'abrir', child: Text('Abrir / editar')),
-            PopupMenuItem(value: 'pdf', child: Text('Gerar PDF')),
-            PopupMenuItem(value: 'excluir', child: Text('Excluir ata')),
+          itemBuilder: (_) => [
+            PopupMenuItem(
+                value: 'abrir',
+                child: Text(Sync.instance.podeEditar ? 'Abrir / editar' : 'Abrir')),
+            const PopupMenuItem(value: 'pdf', child: Text('Gerar PDF')),
+            if (Sync.instance.podeEditar) ...const [
+              PopupMenuItem(value: 'publicar', child: Text('Publicar no Mural')),
+              PopupMenuItem(value: 'excluir', child: Text('Excluir ata')),
+            ],
           ],
         ),
       ),
@@ -370,14 +390,15 @@ class _AtasPageState extends State<AtasPage> {
       appBar: AppBar(
         title: const Text('Atas'),
         actions: [
+          if (Sync.instance.podeEditar)
           IconButton(
             icon: const Icon(Icons.upload_file),
             tooltip: 'Importar arquivo (Word, PDF, TXT)',
             onPressed: _importar,
           ),
           IconButton(
-            icon: const Icon(Icons.brightness_6_outlined),
-            tooltip: 'Aparência (claro / escuro)',
+            icon: const Icon(Icons.palette_outlined),
+            tooltip: 'Aparência e cores',
             onPressed: widget.onAparencia,
           ),
         ],
@@ -411,7 +432,9 @@ class _AtasPageState extends State<AtasPage> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: !Sync.instance.podeEditar
+          ? null
+          : FloatingActionButton.extended(
         onPressed: _menuNova,
         icon: const Icon(Icons.add),
         label: const Text('Nova ata'),

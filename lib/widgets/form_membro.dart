@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models.dart';
+import '../nuvem/sync_service.dart';
 import 'membro_widgets.dart';
 import 'seletor_data.dart';
 
@@ -16,6 +17,11 @@ Future<Entidade?> abrirFormularioMembro(
   Entidade? existente,
   String congregacaoInicial = '',
 }) async {
+  if (!Sync.instance.podeEditar) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Sua conta só pode consultar (somente leitura).')));
+    return null;
+  }
   const uuid = Uuid();
   final picker = ImagePicker();
 

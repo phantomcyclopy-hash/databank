@@ -7,7 +7,10 @@ import 'package:uuid/uuid.dart';
 import '../calendario.dart';
 import '../leitor_documentos.dart';
 import '../models.dart';
+import '../nuvem/sync_service.dart';
+import '../publicacao_util.dart';
 import '../widgets/dialogos.dart';
+import '../widgets/publicar_dialog.dart';
 import '../widgets/seletor_data.dart';
 import 'opcoes_impressao_page.dart';
 
@@ -40,6 +43,9 @@ class _AtaEditorPageState extends State<AtaEditorPage> {
   Ata get _ata => widget.ata;
   bool get _ordinaria => _ata.tipo == 'ordinaria';
 
+  /// Inspetor e membro só leem: campos travados e sem botões de alteração.
+  bool get _ro => !Sync.instance.podeEditar;
+
   @override
   void initState() {
     super.initState();
@@ -62,6 +68,7 @@ class _AtaEditorPageState extends State<AtaEditorPage> {
   }
 
   void _aplicarCampos() {
+    if (_ro) return;
     final t = _tituloCtrl.text.trim();
     if (t.isNotEmpty) _ata.titulo = t;
     _ata.texto = _textoCtrl.text;
@@ -280,7 +287,7 @@ class _AtaEditorPageState extends State<AtaEditorPage> {
                   child: Text(titulo,
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                 ),
-                if (acao != null) acao,
+                if (acao != null && !_ro) acao,
               ],
             ),
             if (ajuda != null)
@@ -289,7 +296,10 @@ class _AtaEditorPageState extends State<AtaEditorPage> {
                 child: Text(ajuda, style: TextStyle(fontSize: 12, color: e.onSurfaceVariant)),
               ),
             const SizedBox(height: 8),
-            ...filhos,
+            IgnorePointer(
+              ignoring: _ro,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: filhos),
+            ),
           ],
         ),
       ),
@@ -329,12 +339,26 @@ class _AtaEditorPageState extends State<AtaEditorPage> {
             onSelected: (v) {
               if (v == 'importar') _importar();
               if (v == 'pdf') _gerarPdf();
+              if (v == 'publicar') {
+                _salvarAgora();
+                publicarNoMural(
+                  context,
+                  _banco,
+                  tipo: 'ata',
+                  titulo: _ata.titulo,
+                  texto: textoDaAta(_banco, _ata),
+                  onSalvar: widget.onSalvar,
+                );
+              }
               if (v == 'excluir') _excluirAta();
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'importar', child: Text('Importar arquivo (Word, PDF, TXT)')),
-              PopupMenuItem(value: 'pdf', child: Text('Gerar PDF / opções de impressão')),
-              PopupMenuItem(value: 'excluir', child: Text('Excluir ata')),
+            itemBuilder: (_) => [
+              if (!_ro)
+                const PopupMenuItem(
+                    value: 'importar', child: Text('Importar arquivo (Word, PDF, TXT)')),
+              const PopupMenuItem(value: 'pdf', child: Text('Gerar PDF / opções de impressão')),
+              if (!_ro) const PopupMenuItem(value: 'publicar', child: Text('Publicar no Mural')),
+              if (!_ro) const PopupMenuItem(value: 'excluir', child: Text('Excluir ata')),
             ],
           ),
         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../calendario.dart';
 import '../models.dart';
+import '../nuvem/sync_service.dart';
 import '../widgets/compromisso_tile.dart';
 import '../widgets/mural_dialogs.dart';
 
@@ -46,7 +47,10 @@ class _AgendaPageState extends State<AgendaPage> {
   }
 
   List<Compromisso> _compromissosDo(DateTime d) {
-    final l = _banco.compromissos.where((c) => c.ocorreEm(d)).toList();
+    final veTudo = Sync.instance.veTudo;
+    final l = _banco.compromissos
+        .where((c) => c.ocorreEm(d) && (c.tipo == 'evento' || veTudo))
+        .toList();
     l.sort((a, b) => (a.hora < 0 ? 9999 : a.hora).compareTo(b.hora < 0 ? 9999 : b.hora));
     return l;
   }
@@ -74,7 +78,7 @@ class _AgendaPageState extends State<AgendaPage> {
     final eHoje = d == hoje;
     final selecionado = d == _sel;
     final temC = _compromissosDo(d).isNotEmpty;
-    final temA = _aniversariosDo(d).isNotEmpty;
+    final temA = Sync.instance.veTudo && _aniversariosDo(d).isNotEmpty;
     final temD = comemorativasNoDia(_banco, d).isNotEmpty;
 
     return InkWell(
@@ -125,7 +129,8 @@ class _AgendaPageState extends State<AgendaPage> {
     ];
 
     final compromissos = _compromissosDo(_sel);
-    final aniversarios = _aniversariosDo(_sel);
+    final aniversarios = Sync.instance.veTudo ? _aniversariosDo(_sel) : <Entidade>[];
+    final edita = Sync.instance.podeEditar;
     final datas = comemorativasNoDia(_banco, _sel);
 
     return Scaffold(
@@ -134,7 +139,7 @@ class _AgendaPageState extends State<AgendaPage> {
         actions: [
           TextButton(
             onPressed: _irParaHoje,
-            child: const Text('Hoje', style: TextStyle(color: Colors.white)),
+            child: const Text('Hoje'),
           ),
         ],
       ),
@@ -233,13 +238,16 @@ class _AgendaPageState extends State<AgendaPage> {
                       dia: _sel,
                       mostrarData: false,
                       aoMudar: _mudou,
+                      somenteLeitura: !edita,
                     )),
               ],
             ),
           ),
         ],
       ),
-      floatingActionButton: PopupMenuButton<String>(
+      floatingActionButton: !edita
+          ? null
+          : PopupMenuButton<String>(
         onSelected: _novo,
         itemBuilder: (_) => const [
           PopupMenuItem(value: 'evento', child: Text('Novo evento neste dia')),

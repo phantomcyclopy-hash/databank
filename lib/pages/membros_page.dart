@@ -8,11 +8,13 @@ import 'package:share_plus/share_plus.dart';
 
 import '../importador.dart';
 import '../models.dart';
+import '../nuvem/sync_service.dart';
 import '../widgets/campos_extras_dialog.dart';
 import '../widgets/classes_dialog.dart';
 import '../widgets/congregacoes_dialog.dart';
 import '../widgets/desligar_dialog.dart';
 import '../widgets/dialogos.dart';
+import '../widgets/ficha_membro.dart';
 import '../widgets/form_membro.dart';
 import '../widgets/membro_widgets.dart';
 import '../widgets/selecao_acoes.dart';
@@ -179,12 +181,15 @@ class _MembrosPageState extends State<MembrosPage> {
                 break;
             }
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'lista', child: Text('Adicionar a uma lista')),
-            PopupMenuItem(value: 'classe', child: Text('Alterar classe')),
-            PopupMenuItem(value: 'cong', child: Text('Alterar congregação')),
-            PopupMenuItem(value: 'imprimir', child: Text('Imprimir / relatório')),
-            PopupMenuItem(value: 'excluir', child: Text('Excluir membros')),
+          itemBuilder: (_) => [
+            if (Sync.instance.podeEditar) ...const [
+              PopupMenuItem(value: 'lista', child: Text('Adicionar a uma lista')),
+              PopupMenuItem(value: 'classe', child: Text('Alterar classe')),
+              PopupMenuItem(value: 'cong', child: Text('Alterar congregação')),
+            ],
+            const PopupMenuItem(value: 'imprimir', child: Text('Imprimir / relatório')),
+            if (Sync.instance.podeEditar)
+              const PopupMenuItem(value: 'excluir', child: Text('Excluir membros')),
           ],
         ),
       ],
@@ -378,7 +383,7 @@ class _MembrosPageState extends State<MembrosPage> {
           'ibmmkar_backup_${h.year}${h.month.toString().padLeft(2, '0')}${h.day.toString().padLeft(2, '0')}.json';
       final arquivo = File('${dir.path}/$nome');
       await arquivo.writeAsString(json);
-      await Share.shareXFiles([XFile(arquivo.path)], text: 'Backup IBMMKAR');
+      await Share.shareXFiles([XFile(arquivo.path)], text: 'Backup Secretaria IBMMK');
     } catch (e) {
       // Sem compartilhamento disponível: mostra o texto para copiar.
       if (mounted) mostrarExportacao(context, 'Backup completo (JSON)', json);
@@ -453,20 +458,26 @@ class _MembrosPageState extends State<MembrosPage> {
       tooltip: 'Ações',
       onSelected: (v) {
         if (v == 'editar') _editar(m);
+        if (v == 'ver') mostrarFichaMembro(context, _banco, m);
         if (v == 'ficha') _imprimirFicha(m);
         if (v == 'desligar') _desligar(m);
         if (v == 'reativar') _reativar(m);
         if (v == 'excluir') _excluir(m);
       },
-      itemBuilder: (_) => [
-        const PopupMenuItem(value: 'editar', child: Text('Editar')),
-        const PopupMenuItem(value: 'ficha', child: Text('Imprimir ficha')),
-        if (m.ativo)
-          const PopupMenuItem(value: 'desligar', child: Text('Desligar membro (saída)'))
-        else
-          const PopupMenuItem(value: 'reativar', child: Text('Reativar membro')),
-        const PopupMenuItem(value: 'excluir', child: Text('Excluir membro (apagar)')),
-      ],
+      itemBuilder: (_) {
+        final edita = Sync.instance.podeEditar;
+        return [
+          PopupMenuItem(
+              value: edita ? 'editar' : 'ver', child: Text(edita ? 'Editar' : 'Ver ficha')),
+          const PopupMenuItem(value: 'ficha', child: Text('Imprimir ficha')),
+          if (edita && m.ativo)
+            const PopupMenuItem(value: 'desligar', child: Text('Desligar membro (saída)'))
+          else if (edita)
+            const PopupMenuItem(value: 'reativar', child: Text('Reativar membro')),
+          if (edita)
+            const PopupMenuItem(value: 'excluir', child: Text('Excluir membro (apagar)')),
+        ];
+      },
     );
   }
 
@@ -497,8 +508,8 @@ class _MembrosPageState extends State<MembrosPage> {
             onPressed: () => _relatorio(visiveis),
           ),
           IconButton(
-            icon: const Icon(Icons.brightness_6_outlined),
-            tooltip: 'Aparência (claro / escuro)',
+            icon: const Icon(Icons.palette_outlined),
+            tooltip: 'Aparência e cores',
             onPressed: widget.onAparencia,
           ),
           PopupMenuButton<String>(
@@ -532,14 +543,16 @@ class _MembrosPageState extends State<MembrosPage> {
                   break;
               }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'importar', child: Text('Importar / restaurar backup (JSON, CSV, TXT)')),
-              PopupMenuItem(value: 'congs', child: Text('Congregações e cores')),
-              PopupMenuItem(value: 'classes', child: Text('Classes da EBD')),
-              PopupMenuItem(value: 'campos', child: Text('Campos extras')),
-              PopupMenuItem(value: 'backup', child: Text('Backup completo (compartilhar arquivo)')),
-              PopupMenuItem(value: 'json', child: Text('Exportar membros (JSON)')),
-              PopupMenuItem(value: 'pdf', child: Text('Opções de impressão')),
+            itemBuilder: (_) => [
+              if (Sync.instance.podeEditar) ...const [
+                PopupMenuItem(value: 'importar', child: Text('Importar / restaurar backup (JSON, CSV, TXT)')),
+                PopupMenuItem(value: 'congs', child: Text('Congregações e cores')),
+                PopupMenuItem(value: 'classes', child: Text('Classes da EBD')),
+                PopupMenuItem(value: 'campos', child: Text('Campos extras')),
+              ],
+              const PopupMenuItem(value: 'backup', child: Text('Backup completo (compartilhar arquivo)')),
+              const PopupMenuItem(value: 'json', child: Text('Exportar membros (JSON)')),
+              const PopupMenuItem(value: 'pdf', child: Text('Opções de impressão')),
             ],
           ),
         ],
@@ -567,7 +580,9 @@ class _MembrosPageState extends State<MembrosPage> {
               membros: visiveis,
               corGrade: kCorPadrao,
               corPadrao: kCorSemCong,
-              onTap: _editar,
+              onTap: (m) => Sync.instance.podeEditar
+                  ? _editar(m)
+                  : mostrarFichaMembro(context, _banco, m),
               acoes: _modoSel ? (m) => const SizedBox.shrink() : _menuMembro,
               selecionados: _modoSel ? _sel : null,
               onSelecionar: (m, v) => setState(() {
@@ -590,7 +605,11 @@ class _MembrosPageState extends State<MembrosPage> {
                   leading: _modoSel
                       ? Checkbox(value: _sel.contains(m.id), onChanged: (_) => _alternar(m))
                       : null,
-                  onTap: _modoSel ? () => _alternar(m) : () => _editar(m),
+                  onTap: _modoSel
+                      ? () => _alternar(m)
+                      : () => Sync.instance.podeEditar
+                          ? _editar(m)
+                          : mostrarFichaMembro(context, _banco, m),
                   onLongPress: _modoSel ? null : () => _entrarSelecao(m),
                   trailing: _modoSel ? null : _menuMembro(m),
                 );
@@ -637,7 +656,7 @@ class _MembrosPageState extends State<MembrosPage> {
           );
         },
       ),
-      floatingActionButton: _modoSel
+      floatingActionButton: (_modoSel || !Sync.instance.podeEditar)
           ? null
           : FloatingActionButton.extended(
         onPressed: _novo,

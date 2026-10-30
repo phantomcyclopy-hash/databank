@@ -4,9 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models.dart';
+import '../nuvem/sync_service.dart';
+import '../publicacao_util.dart';
 import '../widgets/classes_dialog.dart';
 import '../widgets/dialogos.dart';
+import '../widgets/ficha_membro.dart';
 import '../widgets/form_membro.dart';
+import '../widgets/publicar_dialog.dart';
 import '../widgets/membro_widgets.dart';
 import '../widgets/selecao_acoes.dart';
 import '../widgets/seletor_cor.dart';
@@ -133,8 +137,10 @@ class _ListaDetalhesPageState extends State<ListaDetalhesPage> {
             }
           },
           itemBuilder: (_) => [
-            if (_padrao) const PopupMenuItem(value: 'remover', child: Text('Remover da lista')),
-            const PopupMenuItem(value: 'classe', child: Text('Alterar classe')),
+            if (_padrao && Sync.instance.podeEditar)
+              const PopupMenuItem(value: 'remover', child: Text('Remover da lista')),
+            if (Sync.instance.podeEditar)
+              const PopupMenuItem(value: 'classe', child: Text('Alterar classe')),
             const PopupMenuItem(value: 'imprimir', child: Text('Imprimir seleção')),
           ],
         ),
@@ -437,17 +443,23 @@ class _ListaDetalhesPageState extends State<ListaDetalhesPage> {
       tooltip: 'Ações',
       onSelected: (v) {
         if (v == 'editar') _editar(m);
+        if (v == 'ver') mostrarFichaMembro(context, _banco, m);
         if (v == 'classe') _alterarClasse(m);
         if (v == 'ficha') _imprimirFicha(m);
         if (v == 'remover') _removerDaLista(m);
       },
-      itemBuilder: (_) => [
-        const PopupMenuItem(value: 'editar', child: Text('Editar ficha')),
-        if (_lista.tipo == 'classes')
-          const PopupMenuItem(value: 'classe', child: Text('Alterar classe (matricular)')),
-        const PopupMenuItem(value: 'ficha', child: Text('Imprimir ficha')),
-        if (_padrao) const PopupMenuItem(value: 'remover', child: Text('Remover da lista')),
-      ],
+      itemBuilder: (_) {
+        final edita = Sync.instance.podeEditar;
+        return [
+          PopupMenuItem(
+              value: edita ? 'editar' : 'ver', child: Text(edita ? 'Editar ficha' : 'Ver ficha')),
+          if (edita && _lista.tipo == 'classes')
+            const PopupMenuItem(value: 'classe', child: Text('Alterar classe (matricular)')),
+          const PopupMenuItem(value: 'ficha', child: Text('Imprimir ficha')),
+          if (edita && _padrao)
+            const PopupMenuItem(value: 'remover', child: Text('Remover da lista')),
+        ];
+      },
     );
   }
 
@@ -458,7 +470,11 @@ class _ListaDetalhesPageState extends State<ListaDetalhesPage> {
       corPadrao: corLista,
       selecionado: _modoSel && _sel.contains(m.id),
       leading: _modoSel ? Checkbox(value: _sel.contains(m.id), onChanged: (_) => _alternar(m)) : null,
-      onTap: _modoSel ? () => _alternar(m) : () => _editar(m),
+      onTap: _modoSel
+          ? () => _alternar(m)
+          : () => Sync.instance.podeEditar
+              ? _editar(m)
+              : mostrarFichaMembro(context, _banco, m),
       onLongPress: _modoSel ? null : () => _entrarSelecao(m),
       etiqueta: _lista.tipo == 'aniversariantes' ? _etiquetaAniversario(m) : null,
       trailing: _modoSel ? null : (trailing ?? _menuMembro(m)),
@@ -596,7 +612,8 @@ class _ListaDetalhesPageState extends State<ListaDetalhesPage> {
         : corLista;
 
     final manual = _padrao && _filtro.ordem == 'manual';
-    final podeReordenar = manual && !_filtro.ativo && !_lista.isLocked && !_modoSel;
+    final podeReordenar =
+        manual && !_filtro.ativo && !_lista.isLocked && !_modoSel && Sync.instance.podeEditar;
 
     IconData iconeAtalho;
     String dicaAtalho;
@@ -663,6 +680,16 @@ class _ListaDetalhesPageState extends State<ListaDetalhesPage> {
                     widget.onSalvar();
                   });
                   break;
+                case 'publicar':
+                  publicarNoMural(
+                    context,
+                    _banco,
+                    tipo: 'lista',
+                    titulo: _lista.titulo,
+                    texto: textoDaLista(_banco, _lista),
+                    onSalvar: widget.onSalvar,
+                  );
+                  break;
                 case 'json':
                   _exportar();
                   break;
@@ -678,14 +705,16 @@ class _ListaDetalhesPageState extends State<ListaDetalhesPage> {
               }
             },
             itemBuilder: (_) => [
-              if (_padrao) ...const [
+              if (_padrao && Sync.instance.podeEditar) ...const [
                 PopupMenuItem(value: 'existentes', child: Text('Adicionar membros cadastrados')),
                 PopupMenuItem(value: 'novo', child: Text('Novo membro')),
               ],
-              if (_lista.tipo == 'classes') ...const [
+              if (_lista.tipo == 'classes' && Sync.instance.podeEditar) ...const [
                 PopupMenuItem(value: 'matricular', child: Text('Matricular membros')),
                 PopupMenuItem(value: 'classes', child: Text('Gerenciar classes')),
               ],
+              if (Sync.instance.podeEditar)
+                const PopupMenuItem(value: 'publicar', child: Text('Publicar no Mural')),
               const PopupMenuItem(value: 'json', child: Text('Exportar lista (JSON)')),
               const PopupMenuItem(value: 'pdf', child: Text('Opções de impressão')),
             ],
@@ -734,7 +763,9 @@ class _ListaDetalhesPageState extends State<ListaDetalhesPage> {
               membros: visiveis,
               corGrade: corGrade,
               corPadrao: corLista,
-              onTap: _editar,
+              onTap: (m) => Sync.instance.podeEditar
+                  ? _editar(m)
+                  : mostrarFichaMembro(context, _banco, m),
               acoes: _modoSel ? (m) => const SizedBox.shrink() : _menuMembro,
               selecionados: _modoSel ? _sel : null,
               onSelecionar: (m, v) => setState(() {
@@ -806,7 +837,7 @@ class _ListaDetalhesPageState extends State<ListaDetalhesPage> {
           );
         },
       ),
-      floatingActionButton: _modoSel
+      floatingActionButton: (_modoSel || !Sync.instance.podeEditar)
           ? null
           : _padrao
           ? FloatingActionButton.extended(

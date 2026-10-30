@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models.dart';
+import '../nuvem/sync_service.dart';
+import '../widgets/ficha_membro.dart';
 import '../widgets/form_membro.dart';
 import '../widgets/membro_widgets.dart';
 import 'opcoes_impressao_page.dart';
@@ -44,6 +46,10 @@ class _AniversariosPageState extends State<AniversariosPage> {
   }
 
   Future<void> _editar(Entidade m) async {
+    if (!Sync.instance.podeEditar) {
+      mostrarFichaMembro(context, _banco, m);
+      return;
+    }
     final novo = await abrirFormularioMembro(context, _banco, existente: m);
     if (novo == null) return;
     _banco.salvarMembro(novo);
@@ -166,8 +172,8 @@ class _AniversariosPageState extends State<AniversariosPage> {
             onPressed: () => _imprimir(itens),
           ),
           IconButton(
-            icon: const Icon(Icons.brightness_6_outlined),
-            tooltip: 'Aparência (claro / escuro)',
+            icon: const Icon(Icons.palette_outlined),
+            tooltip: 'Aparência e cores',
             onPressed: widget.onAparencia,
           ),
         ],

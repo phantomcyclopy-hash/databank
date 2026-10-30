@@ -6,7 +6,10 @@ import 'package:uuid/uuid.dart';
 
 import '../importador.dart';
 import '../models.dart';
+import '../nuvem/sync_service.dart';
+import '../publicacao_util.dart';
 import '../widgets/dialogos.dart';
+import '../widgets/publicar_dialog.dart';
 import '../widgets/seletor_cor.dart';
 import '../widgets/seletor_data.dart';
 import 'lista_detalhes_page.dart';
@@ -117,6 +120,17 @@ class _ListasPageState extends State<ListasPage> {
     mostrarExportacao(context, 'Exportar lista (JSON)', json);
   }
 
+  void _publicar(ListaEntidades l) {
+    publicarNoMural(
+      context,
+      _banco,
+      tipo: 'lista',
+      titulo: l.titulo,
+      texto: textoDaLista(_banco, l),
+      onSalvar: widget.onSalvar,
+    );
+  }
+
   Widget _cabecalho(ColorScheme esquema, bool vazio) {
     const nomesTipo = {
       'padrao': 'Escolhidas',
@@ -199,6 +213,14 @@ class _ListasPageState extends State<ListasPage> {
               case 'exportar':
                 _exportarSelecionada();
                 break;
+              case 'publicar':
+                final alvo = _selecionadas();
+                if (alvo.length != 1) {
+                  _snack('Selecione apenas uma lista para publicar.');
+                } else {
+                  _publicar(alvo.first);
+                }
+                break;
               case 'excluir':
                 _excluirSelecionadas();
                 break;
@@ -207,6 +229,7 @@ class _ListasPageState extends State<ListasPage> {
           itemBuilder: (_) => const [
             PopupMenuItem(value: 'bloquear', child: Text('Bloquear')),
             PopupMenuItem(value: 'desbloquear', child: Text('Desbloquear')),
+            PopupMenuItem(value: 'publicar', child: Text('Publicar no Mural (uma lista)')),
             PopupMenuItem(value: 'exportar', child: Text('Exportar (uma lista)')),
             PopupMenuItem(value: 'excluir', child: Text('Excluir listas')),
           ],
@@ -224,7 +247,9 @@ class _ListasPageState extends State<ListasPage> {
 
   Future<void> _dialogoLista({ListaEntidades? existente}) async {
     final tituloCtrl = TextEditingController(text: existente?.titulo ?? '');
-    var cor = corDeHex(existente?.corTema ?? '#1B2A4A');
+    var cor = existente != null
+        ? corDeHex(existente.corTema)
+        : Theme.of(context).colorScheme.primary;
     var mostrarData = existente?.mostrarData ?? true;
     var formatoData = existente?.formatoData ?? 'dd/mm/aaaa';
     var mostrarHora = existente?.mostrarHora ?? true;
@@ -645,7 +670,7 @@ class _ListasPageState extends State<ListasPage> {
                                     ],
                                   ),
                                 ),
-                                if (!_modoSel)
+                                if (!_modoSel && Sync.instance.podeEditar)
                                 IconButton(
                                   icon: Icon(
                                     lista.isLocked ? Icons.lock : Icons.lock_open,
@@ -657,14 +682,16 @@ class _ListasPageState extends State<ListasPage> {
                                     widget.onSalvar();
                                   },
                                 ),
-                                if (!_modoSel)
+                                if (!_modoSel && Sync.instance.podeEditar)
                                 PopupMenuButton<String>(
                                   onSelected: (v) {
                                     if (v == 'editar') _dialogoLista(existente: lista);
+                                    if (v == 'publicar') _publicar(lista);
                                     if (v == 'excluir') _excluir(lista);
                                   },
                                   itemBuilder: (_) => const [
                                     PopupMenuItem(value: 'editar', child: Text('Configurar lista')),
+                                    PopupMenuItem(value: 'publicar', child: Text('Publicar no Mural')),
                                     PopupMenuItem(value: 'excluir', child: Text('Excluir lista')),
                                   ],
                                 ),
@@ -694,20 +721,21 @@ class _ListasPageState extends State<ListasPage> {
             tooltip: 'Selecionar várias',
             onPressed: () => _entrarSelecao(),
           ),
+          if (Sync.instance.podeEditar)
+            IconButton(
+              icon: const Icon(Icons.file_upload_outlined),
+              tooltip: 'Importar (JSON, CSV, TXT)',
+              onPressed: _importar,
+            ),
           IconButton(
-            icon: const Icon(Icons.file_upload_outlined),
-            tooltip: 'Importar (JSON, CSV, TXT)',
-            onPressed: _importar,
-          ),
-          IconButton(
-            icon: const Icon(Icons.brightness_6_outlined),
-            tooltip: 'Aparência (claro / escuro)',
+            icon: const Icon(Icons.palette_outlined),
+            tooltip: 'Aparência e cores',
             onPressed: widget.onAparencia,
           ),
         ],
       ),
       body: corpo,
-      floatingActionButton: _modoSel
+      floatingActionButton: (_modoSel || !Sync.instance.podeEditar)
           ? null
           : FloatingActionButton.extended(
         onPressed: () => _dialogoLista(),

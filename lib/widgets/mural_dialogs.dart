@@ -119,6 +119,7 @@ Future<Compromisso?> formCompromisso(
   var temHora = (existente?.hora ?? -1) >= 0;
   var hora = (existente?.hora ?? -1) >= 0 ? existente!.hora : 19 * 60;
   var repete = existente?.repete ?? 'nao';
+  var categoria = existente?.categoria ?? 'outro';
   var erroTitulo = false;
   var erroData = false;
 
@@ -144,6 +145,24 @@ Future<Compromisso?> formCompromisso(
                   ),
                 ),
                 if (ehEvento)
+                  DropdownButtonFormField<String>(
+                    value: categoria,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Tipo de evento'),
+                    items: kCategoriasEvento.entries
+                        .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                        .toList(),
+                    onChanged: (v) => setF(() => categoria = v ?? 'outro'),
+                  ),
+                if (ehEvento && categoria == 'versiculo')
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Título = a referência (ex.: Salmos 23:1). Detalhes = o texto do versículo. Aparece no Mural no dia escolhido.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                if (ehEvento && categoria != 'versiculo')
                   TextField(
                     controller: localCtrl,
                     textCapitalization: TextCapitalization.sentences,
@@ -214,6 +233,7 @@ Future<Compromisso?> formCompromisso(
                   hora: temHora ? hora : -1,
                   feito: existente?.feito ?? false,
                   repete: repete,
+                  categoria: ehEvento ? categoria : 'outro',
                 ),
               );
             },
@@ -221,6 +241,62 @@ Future<Compromisso?> formCompromisso(
           ),
         ],
       ),
+    ),
+  );
+}
+
+/// Edita o "Fale conosco" (telefone, e-mail e endereço). Null se cancelado.
+Future<Contato?> formContato(BuildContext context, Contato atual) {
+  final tel = TextEditingController(text: atual.telefone);
+  final mail = TextEditingController(text: atual.email);
+  final end = TextEditingController(text: atual.endereco);
+
+  return showDialog<Contato>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Fale conosco'),
+      content: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Preencha só o que quiser mostrar. Aparece no fim do Mural para todos.',
+                style: TextStyle(fontSize: 12),
+              ),
+              TextField(
+                controller: tel,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(labelText: 'Telefone / WhatsApp'),
+              ),
+              TextField(
+                controller: mail,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'E-mail'),
+              ),
+              TextField(
+                controller: end,
+                minLines: 2,
+                maxLines: 4,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(labelText: 'Endereço'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            ctx,
+            Contato(telefone: tel.text.trim(), email: mail.text.trim(), endereco: end.text.trim()),
+          ),
+          child: const Text('Salvar'),
+        ),
+      ],
     ),
   );
 }

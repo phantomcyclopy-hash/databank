@@ -22,8 +22,11 @@ class AppStorage {
 
   ConfigPdf configPdf = ConfigPdf();
 
-  /// 'system' (automático), 'light' ou 'dark'.
+  /// 'system' (automático), 'light', 'dark' ou 'preto' (preto absoluto).
   String tema = 'system';
+
+  /// Cor de destaque do app (hex).
+  String corApp = '#8B6CEF';
 
   bool get disponivel => _db != null;
 
@@ -37,7 +40,9 @@ class AppStorage {
 
     final app = await _store.record('config_app').get(_db!);
     final t = app?['tema'];
-    if (t == 'light' || t == 'dark' || t == 'system') tema = t as String;
+    if (t == 'light' || t == 'dark' || t == 'system' || t == 'preto') tema = t as String;
+    final c = app?['corApp'];
+    if (c is String && c.startsWith('#') && c.length == 7) corApp = c;
   }
 
   Future<Banco> carregarBanco() async {
@@ -84,10 +89,25 @@ class AppStorage {
     await _store.record('config_pdf').put(db, cfg.toJson());
   }
 
-  Future<void> salvarTema(String novo) async {
-    tema = novo;
+  /// Registros genéricos (nuvem, retratos de sincronização...).
+  Future<Map<String, dynamic>?> lerMapa(String chave) async {
+    final db = _db;
+    if (db == null) return null;
+    final m = await _store.record(chave).get(db);
+    return m == null ? null : Map<String, dynamic>.from(m);
+  }
+
+  Future<void> gravarMapa(String chave, Map<String, dynamic> valor) async {
     final db = _db;
     if (db == null) return;
-    await _store.record('config_app').put(db, {'tema': novo});
+    await _store.record(chave).put(db, valor);
+  }
+
+  Future<void> salvarAparencia(String novoTema, String novaCor) async {
+    tema = novoTema;
+    corApp = novaCor;
+    final db = _db;
+    if (db == null) return;
+    await _store.record('config_app').put(db, {'tema': novoTema, 'corApp': novaCor});
   }
 }
